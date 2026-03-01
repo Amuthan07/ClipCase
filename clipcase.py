@@ -274,6 +274,41 @@ def analyze_with_openai(frames: list, principles: str, api_key: str) -> str:
     return response.choices[0].message.content
 
 
+def _pick_gemini_model() -> str:
+    """
+    Auto-select the best available Gemini model for this API key.
+    Queries the live model list first; falls back to a priority list.
+    """
+    try:
+        import google.generativeai as genai
+        available = {m.name.split("/")[-1] for m in genai.list_models()
+                     if "generateContent" in getattr(m, "supported_generation_methods", [])}
+        priority = [
+            "gemini-2.5-flash",       # Best free-tier price/performance
+            "gemini-2.5-flash-lite",  # Fastest & cheapest
+            "gemini-2.5-pro",         # Most capable (may need billing)
+            "gemini-2.0-flash-lite",  # Stable fallback
+            "gemini-2.0-flash-001",   # Pinned stable version
+            "gemini-flash-latest",    # Latest flash alias
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+        ]
+        for name in priority:
+            if name in available:
+                print(f"  Auto-selected Gemini model: {name}")
+                return name
+        # Last resort: return first available vision-capable model
+        if available:
+            chosen = sorted(available)[0]
+            print(f"  Using Gemini model: {chosen}")
+            return chosen
+    except Exception:
+        pass
+
+    # Hardcoded fallback if list_models() fails
+    return "gemini-1.5-flash-latest"
+
+
 def analyze_with_gemini(frames: list, principles: str, api_key: str) -> str:
     """Analyze frames using Google Gemini API."""
     try:
@@ -285,21 +320,8 @@ def analyze_with_gemini(frames: list, principles: str, api_key: str) -> str:
 
     genai.configure(api_key=api_key)
 
-    # Try models in preference order — newest first, fallback to older ones
-    gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro-latest"]
-    model = None
-    model_name = None
-    for name in gemini_models:
-        try:
-            model = genai.GenerativeModel(name)
-            model_name = name
-            break
-        except Exception:
-            continue
-
-    if model is None:
-        print("  ERROR: No supported Gemini model found. Check your API key and quota.")
-        sys.exit(1)
+    model_name = _pick_gemini_model()
+    model = genai.GenerativeModel(model_name)
 
     prompt = (
         "You are an expert QA engineer. I'm showing you screenshots extracted from a screen recording "
@@ -418,14 +440,8 @@ Output ONLY the markdown table (with header row and separator row), nothing else
             sys.exit(1)
 
         genai.configure(api_key=api_key)
-        model_name = None
-        for name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro-latest"]:
-            try:
-                model = genai.GenerativeModel(name)
-                model_name = name
-                break
-            except Exception:
-                continue
+        model_name = _pick_gemini_model()
+        model = genai.GenerativeModel(model_name)
         print(f"  Generating test cases with Gemini ({model_name})...")
         import re as _re
         for attempt in range(1, 4):
