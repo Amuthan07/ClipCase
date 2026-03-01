@@ -1,0 +1,9 @@
+# video2testcase - Dependencies
+# Install: pip install -r requirements.txt
+
+# LLM Providers (install at least one)
+anthropic>=0.39.0       # For Claude API
+openai>=1.50.0          # For OpenAI GPT-4o API
+
+# Excel export (optional but recommended)
+openpyxl>=3.1.0

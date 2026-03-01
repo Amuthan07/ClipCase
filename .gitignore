@@ -1,0 +1,28 @@
+# Environment
+.env
+__pycache__/
+*.pyc
+
+# Extracted frames (regenerate from video)
+frames/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temp files
+_temp_recording.*
+
+# Videos
+*.mov
+*.mp4
+*.webm
+*.avi
+*.mkv
+
+# Generated test case outputs
+output/
