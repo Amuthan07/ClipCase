@@ -1,9 +1,11 @@
-# video2testcase - Dependencies
+# Clipcase - Dependencies
 # Install: pip install -r requirements.txt
 
 # LLM Providers (install at least one)
-anthropic>=0.39.0       # For Claude API
-openai>=1.50.0          # For OpenAI GPT-4o API
+anthropic>=0.39.0           # For Claude API
+openai>=1.50.0              # For OpenAI GPT-4o API
+google-generativeai>=0.8.0  # For Google Gemini API
+pillow>=10.0.0              # Required for Gemini image handling
 
 # Excel export (optional but recommended)
 openpyxl>=3.1.0

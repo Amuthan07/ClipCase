@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-video2testcase — Convert screen recording videos into structured test cases.
+clipcase — Convert screen recording videos into structured test cases.
 
 Usage:
-    python video2testcase.py <video_file> [options]
+    python clipcase.py <video_file> [options]
 
 Examples:
-    python video2testcase.py recording.mov
-    python video2testcase.py recording.mov --fps 2 --provider anthropic
-    python video2testcase.py recording.mov --fps 1 --provider openai --output my_tests
+    python clipcase.py recording.mov
+    python clipcase.py recording.mov --fps 2 --provider anthropic
+    python clipcase.py recording.mov --fps 1 --provider openai --output my_tests
 """
 
 import argparse
@@ -274,6 +274,78 @@ def analyze_with_openai(frames: list, principles: str, api_key: str) -> str:
     return response.choices[0].message.content
 
 
+def analyze_with_gemini(frames: list, principles: str, api_key: str) -> str:
+    """Analyze frames using Google Gemini API."""
+    try:
+        import google.generativeai as genai
+        from PIL import Image
+    except ImportError:
+        print("ERROR: Required packages not installed. Run: pip install google-generativeai pillow")
+        sys.exit(1)
+
+    genai.configure(api_key=api_key)
+
+    # Try models in preference order — newest first, fallback to older ones
+    gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro-latest"]
+    model = None
+    model_name = None
+    for name in gemini_models:
+        try:
+            model = genai.GenerativeModel(name)
+            model_name = name
+            break
+        except Exception:
+            continue
+
+    if model is None:
+        print("  ERROR: No supported Gemini model found. Check your API key and quota.")
+        sys.exit(1)
+
+    prompt = (
+        "You are an expert QA engineer. I'm showing you screenshots extracted from a screen recording "
+        "of someone using a web application. Analyze these frames and identify:\n"
+        "1. The application name and URL\n"
+        "2. Every distinct screen/page shown\n"
+        "3. Every user action performed (clicks, form entries, selections, navigation)\n"
+        "4. Every UI element interacted with (buttons, dropdowns, forms, modals, dialogs)\n"
+        "5. Every state change (status badges, progress bars, success/error messages, toasts)\n"
+        "6. The user roles involved (if visible)\n"
+        "7. The complete user flow from start to finish\n\n"
+        "The frames are in chronological order. Describe the complete flow in detail."
+    )
+
+    parts = [prompt]
+    for frame_path in frames:
+        parts.append(Image.open(frame_path))
+
+    print(f"  Sending {len(frames)} frames to Gemini ({model_name}) for analysis...")
+
+    # Retry with backoff on rate limit (429)
+    for attempt in range(1, 4):
+        try:
+            response = model.generate_content(parts)
+            return response.text
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "ResourceExhausted" in err or "quota" in err.lower():
+                # Parse suggested retry delay from error message if available
+                wait = 60 * attempt
+                import re as _re
+                m = _re.search(r"retry in (\d+)", err)
+                if m:
+                    wait = int(m.group(1)) + 5
+                if attempt < 3:
+                    print(f"  Rate limit hit. Waiting {wait}s before retry {attempt}/3...")
+                    time.sleep(wait)
+                else:
+                    print("  ERROR: Gemini rate limit exceeded after 3 attempts.")
+                    print("  The free tier allows ~2 requests/min. Try again in a few minutes.")
+                    print("  Or enable billing at: https://console.cloud.google.com/billing")
+                    sys.exit(1)
+            else:
+                raise
+
+
 def generate_test_cases(flow_analysis: str, principles: str, provider: str, api_key: str) -> str:
     """Generate structured test cases from the flow analysis."""
     prompt = f"""You are an expert QA test case writer. Based on the application flow analysis below, generate comprehensive test cases.
@@ -337,6 +409,44 @@ Output ONLY the markdown table (with header row and separator row), nothing else
             messages=[{"role": "user", "content": prompt}],
         )
         return response.choices[0].message.content
+
+    elif provider == "gemini":
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            print("ERROR: google-generativeai not installed.")
+            sys.exit(1)
+
+        genai.configure(api_key=api_key)
+        model_name = None
+        for name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro-latest"]:
+            try:
+                model = genai.GenerativeModel(name)
+                model_name = name
+                break
+            except Exception:
+                continue
+        print(f"  Generating test cases with Gemini ({model_name})...")
+        import re as _re
+        for attempt in range(1, 4):
+            try:
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "ResourceExhausted" in err or "quota" in err.lower():
+                    wait = 60 * attempt
+                    m = _re.search(r"retry in (\d+)", err)
+                    if m:
+                        wait = int(m.group(1)) + 5
+                    if attempt < 3:
+                        print(f"  Rate limit hit. Waiting {wait}s before retry {attempt}/3...")
+                        time.sleep(wait)
+                    else:
+                        print("  ERROR: Gemini rate limit exceeded. Try again in a few minutes.")
+                        sys.exit(1)
+                else:
+                    raise
 
     return ""
 
@@ -459,7 +569,7 @@ def export_markdown(headers: list, rows: list, output_path: str, video_name: str
         f.write(f"## Project Information\n")
         f.write(f"- **Date Created:** {time.strftime('%b %d, %Y')}\n")
         f.write(f"- **Source Video:** {video_name}\n")
-        f.write(f"- **Generated By:** video2testcase CLI\n\n")
+        f.write(f"- **Generated By:** Clipcase\n\n")
         f.write(f"---\n\n")
         f.write(f"## Flow Analysis\n\n{flow_analysis}\n\n")
         f.write(f"---\n\n")
@@ -495,19 +605,19 @@ def export_markdown(headers: list, rows: list, output_path: str, video_name: str
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert screen recording videos into structured test cases.",
+        description="Clipcase — Convert screen recording videos into structured test cases.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python video2testcase.py recording.mov
-  python video2testcase.py recording.mov --fps 2 --provider anthropic
-  python video2testcase.py recording.mov --fps 1 --provider openai --output my_tests
-  python video2testcase.py recording.mov --frames-only
+  python clipcase.py recording.mov
+  python clipcase.py recording.mov --fps 2 --provider anthropic
+  python clipcase.py recording.mov --fps 1 --provider openai --output my_tests
+  python clipcase.py recording.mov --frames-only
         """,
     )
     parser.add_argument("video", help="Path to the video file (.mov, .mp4, .webm)")
     parser.add_argument("--fps", type=int, default=DEFAULT_FPS, help=f"Frames per second to extract (default: {DEFAULT_FPS})")
-    parser.add_argument("--provider", choices=["anthropic", "openai"], default="anthropic", help="LLM provider (default: anthropic)")
+    parser.add_argument("--provider", choices=["anthropic", "openai", "gemini"], default="anthropic", help="LLM provider (default: anthropic)")
     parser.add_argument("--output", default=None, help="Output file base name (default: derived from video name)")
     parser.add_argument("--output-dir", default="output", help="Directory for generated test case files (default: output)")
     parser.add_argument("--frames-dir", default="frames", help="Directory to store extracted frames (default: frames)")
@@ -521,7 +631,7 @@ Examples:
     load_env()
 
     print("=" * 60)
-    print("  video2testcase — Video to Test Case Generator")
+    print("  Clipcase — Video to Test Case Generator")
     print("=" * 60)
 
     # Step 1: Check ffmpeg
@@ -582,12 +692,20 @@ Examples:
             print("  Set it: export ANTHROPIC_API_KEY=sk-ant-...")
             print("  Or add to .env file: ANTHROPIC_API_KEY=sk-ant-...")
             sys.exit(1)
-    else:
+    elif args.provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             print("  ERROR: OPENAI_API_KEY not set.")
             print("  Set it: export OPENAI_API_KEY=sk-...")
             print("  Or add to .env file: OPENAI_API_KEY=sk-...")
+            sys.exit(1)
+    elif args.provider == "gemini":
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            print("  ERROR: GEMINI_API_KEY not set.")
+            print("  Set it: export GEMINI_API_KEY=AIza...")
+            print("  Or add to .env file: GEMINI_API_KEY=AIza...")
+            print("  Get a free key at: https://aistudio.google.com/app/apikey")
             sys.exit(1)
 
     # Load principles
@@ -620,8 +738,10 @@ Examples:
 
         if args.provider == "anthropic":
             analysis = analyze_with_anthropic(batch, principles, api_key)
-        else:
+        elif args.provider == "openai":
             analysis = analyze_with_openai(batch, principles, api_key)
+        else:
+            analysis = analyze_with_gemini(batch, principles, api_key)
         all_analyses.append(analysis)
 
     flow_analysis = "\n\n---\n\n".join(all_analyses)

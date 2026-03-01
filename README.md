@@ -1,4 +1,4 @@
-# video2testcase
+# Clipcase
 
 Convert screen recording videos of application usage into structured, comprehensive test cases — automatically.
 
@@ -34,8 +34,8 @@ Video (.mov/.mp4) ──▶ ffmpeg (frame extraction) ──▶ AI Vision (frame
 ### 1. Clone and install
 
 ```bash
-git clone <repo-url> video2testcase
-cd video2testcase
+git clone <repo-url> clipcase
+cd clipcase
 pip install -r requirements.txt
 ```
 
@@ -57,7 +57,7 @@ export OPENAI_API_KEY=sk-...
 ### 3. Run
 
 ```bash
-python video2testcase.py your_recording.mov
+python clipcase.py your_recording.mov
 ```
 
 That's it. Your test cases will appear as:
@@ -70,7 +70,7 @@ That's it. Your test cases will appear as:
 ## Usage
 
 ```
-python video2testcase.py <video_file> [options]
+python clipcase.py <video_file> [options]
 ```
 
 ### Options
@@ -89,22 +89,25 @@ python video2testcase.py <video_file> [options]
 
 ```bash
 # Basic — uses Claude, 2 fps
-python video2testcase.py recording.mov
+python clipcase.py recording.mov
 
 # Use OpenAI GPT-4o instead
-python video2testcase.py recording.mov --provider openai
+python clipcase.py recording.mov --provider openai
+
+# Use Google Gemini (free tier)
+python clipcase.py recording.mov --provider gemini
 
 # Higher frame rate for fast-paced UI
-python video2testcase.py recording.mov --fps 4
+python clipcase.py recording.mov --fps 4
 
 # Just extract frames (no AI cost), review manually
-python video2testcase.py recording.mov --frames-only
+python clipcase.py recording.mov --frames-only
 
 # Custom output name
-python video2testcase.py recording.mov --output login_flow_tests
+python clipcase.py recording.mov --output login_flow_tests
 
 # Analyze more frames (lower interval = more frames sent to AI)
-python video2testcase.py recording.mov --sample-interval 5
+python clipcase.py recording.mov --sample-interval 5
 ```
 
 ---
@@ -130,6 +133,17 @@ python video2testcase.py recording.mov --sample-interval 5
    ```
 4. Use `--provider openai` when running
 
+### Option C: Google Gemini — Free tier available
+
+1. Go to [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+2. Sign in with your Google account
+3. Click **Create API Key** (free, no credit card needed)
+4. Add to `.env`:
+   ```
+   GEMINI_API_KEY=AIza...
+   ```
+5. Use `--provider gemini` when running
+
 ---
 
 ## Custom Test Case Principles
@@ -137,7 +151,7 @@ python video2testcase.py recording.mov --sample-interval 5
 You can customize how test cases are written by providing your own principles file:
 
 ```bash
-python video2testcase.py recording.mov --principles my_standards.md
+python clipcase.py recording.mov --principles my_standards.md
 ```
 
 If you place a file named `test_case_creation_principles.md` in the same directory as the video, it will be picked up automatically.
@@ -171,8 +185,8 @@ Professionally styled with:
 ## Project Structure
 
 ```
-video2testcase/
-├── video2testcase.py                   # Main CLI tool
+clipcase/
+├── clipcase.py                         # Main CLI tool
 ├── requirements.txt                    # Python dependencies
 ├── .env.example                        # API key template
 ├── .gitignore                          # Git ignore rules
@@ -201,6 +215,7 @@ Each run makes 2–4 API calls depending on video length:
 |----------|-------------------------|
 | Claude (Anthropic) | ~$0.30 – $1.00 |
 | GPT-4o (OpenAI) | ~$0.50 – $1.50 |
+| Gemini 1.5 Pro (Google) | Free tier available (generous quota) |
 
 Costs scale with frame count and video length.
 
