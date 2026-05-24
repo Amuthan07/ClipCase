@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "clipcase"
+version = "1.0.0"
+description = "Convert screen recording videos into structured QA test cases using AI vision"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+  { name = "Amuthan", email = "your@email.com" }
+]
+keywords = ["qa", "testing", "test-cases", "ai", "cli", "automation"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Testing",
+]
+dependencies = [
+  "anthropic",
+  "openai",
+  "google-generativeai",
+  "openpyxl",
+  "python-dotenv",
+]
+
+[project.scripts]
+clipcase = "clipcase:main"
+
+[project.urls]
+Homepage = "https://github.com/Amuthan07/ClipCase"
+Repository = "https://github.com/Amuthan07/ClipCase"
