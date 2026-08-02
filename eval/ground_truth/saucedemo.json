@@ -1,0 +1,17 @@
+{
+  "recording": "saucedemo-clipcase.mov",
+  "notes": "Hand-labeled by independently inspecting extracted frames (1, 21, 41, 61, 101, 131), not by reading any model's generated output - avoids scoring a model against its own summary.",
+  "actions": [
+    "Noir jacket",
+    "ADD TO CART",
+    "Grey jacket",
+    "My Cart",
+    "Cart",
+    "checkout",
+    "shipping",
+    "payment",
+    "Pay now",
+    "confirmation",
+    "Thank you"
+  ]
+}

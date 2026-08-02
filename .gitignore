@@ -26,3 +26,6 @@ _temp_recording.*
 
 # Generated test case outputs
 output/
+
+# Local eval/production DB (contains real recording content, can include PII)
+db/*.db

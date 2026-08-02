@@ -1,0 +1,20 @@
+# Local Grafana against ClipCase's SQLite eval DB.
+#
+# Usage:
+#   docker compose -f dashboard/grafana/docker-compose.yml up
+#   open http://localhost:3000  (admin/admin)
+#
+# Requires Docker Desktop running locally - not something that could be started/verified from
+# this environment, so treat this as a starting point to run and eyeball, not pixel-verified.
+services:
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./provisioning:/etc/grafana/provisioning
+      - ../../db:/var/lib/clipcase-db:ro

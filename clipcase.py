@@ -16,6 +16,7 @@ import base64
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import glob
@@ -173,7 +174,17 @@ def get_sampled_frames(frames_dir: str, interval: int = FRAME_SAMPLE_INTERVAL) -
     return sampled
 
 
-def analyze_with_anthropic(frames: list, principles: str, api_key: str) -> str:
+def _record_usage(usage_sink: dict | None, prompt_tokens: int | None, completion_tokens: int | None) -> None:
+    """Accumulate token usage into usage_sink in place, if the caller passed one."""
+    if usage_sink is None:
+        return
+    if prompt_tokens is not None:
+        usage_sink["prompt_tokens"] = usage_sink.get("prompt_tokens", 0) + prompt_tokens
+    if completion_tokens is not None:
+        usage_sink["completion_tokens"] = usage_sink.get("completion_tokens", 0) + completion_tokens
+
+
+def analyze_with_anthropic(frames: list, principles: str, api_key: str, usage_sink: dict | None = None) -> str:
     """Analyze frames using Anthropic Claude API."""
     try:
         import anthropic
@@ -223,10 +234,11 @@ def analyze_with_anthropic(frames: list, principles: str, api_key: str) -> str:
         messages=[{"role": "user", "content": content}],
     )
 
+    _record_usage(usage_sink, response.usage.input_tokens, response.usage.output_tokens)
     return response.content[0].text
 
 
-def analyze_with_openai(frames: list, principles: str, api_key: str) -> str:
+def analyze_with_openai(frames: list, principles: str, api_key: str, usage_sink: dict | None = None) -> str:
     """Analyze frames using OpenAI GPT-4o API."""
     try:
         import openai
@@ -271,6 +283,7 @@ def analyze_with_openai(frames: list, principles: str, api_key: str) -> str:
         messages=[{"role": "user", "content": content}],
     )
 
+    _record_usage(usage_sink, response.usage.prompt_tokens, response.usage.completion_tokens)
     return response.choices[0].message.content
 
 
@@ -309,7 +322,7 @@ def _pick_gemini_model() -> str:
     return "gemini-1.5-flash-latest"
 
 
-def analyze_with_gemini(frames: list, principles: str, api_key: str) -> str:
+def analyze_with_gemini(frames: list, principles: str, api_key: str, usage_sink: dict | None = None) -> str:
     """Analyze frames using Google Gemini API."""
     try:
         import google.generativeai as genai
@@ -346,6 +359,9 @@ def analyze_with_gemini(frames: list, principles: str, api_key: str) -> str:
     for attempt in range(1, 4):
         try:
             response = model.generate_content(parts)
+            usage = getattr(response, "usage_metadata", None)
+            if usage is not None:
+                _record_usage(usage_sink, usage.prompt_token_count, usage.candidates_token_count)
             return response.text
         except Exception as e:
             err = str(e)
@@ -368,8 +384,20 @@ def analyze_with_gemini(frames: list, principles: str, api_key: str) -> str:
                 raise
 
 
-def generate_test_cases(flow_analysis: str, principles: str, provider: str, api_key: str) -> str:
-    """Generate structured test cases from the flow analysis."""
+def generate_test_cases(
+    flow_analysis: str,
+    principles: str,
+    provider: str,
+    api_key: str,
+    usage_sink: dict | None = None,
+    request_confidence: bool = False,
+) -> str:
+    """Generate structured test cases from the flow analysis.
+
+    request_confidence=False (default) preserves the exact existing output: the table, and
+    nothing else. When True, the model is asked to append one trailing line self-assessing its
+    own confidence, in a format callers can split off - see production/confidence.py.
+    """
     prompt = f"""You are an expert QA test case writer. Based on the application flow analysis below, generate comprehensive test cases.
 
 ## APPLICATION FLOW ANALYSIS:
@@ -400,6 +428,15 @@ Generate at LEAST 80 test cases covering every interaction in the flow.
 
 Output ONLY the markdown table (with header row and separator row), nothing else before or after."""
 
+    if request_confidence:
+        prompt += (
+            "\n\nAfter the table, on its own final line, add exactly:\n"
+            "CONFIDENCE_SCORE: <a number between 0.0 and 1.0>\n"
+            "representing your own honest confidence that this test case set completely and "
+            "accurately captures the recorded flow, given what you could see in the frames. "
+            "Nothing else after that line."
+        )
+
     if provider == "anthropic":
         try:
             import anthropic
@@ -414,6 +451,7 @@ Output ONLY the markdown table (with header row and separator row), nothing else
             max_tokens=16000,
             messages=[{"role": "user", "content": prompt}],
         )
+        _record_usage(usage_sink, response.usage.input_tokens, response.usage.output_tokens)
         return response.content[0].text
 
     elif provider == "openai":
@@ -430,6 +468,7 @@ Output ONLY the markdown table (with header row and separator row), nothing else
             max_tokens=16000,
             messages=[{"role": "user", "content": prompt}],
         )
+        _record_usage(usage_sink, response.usage.prompt_tokens, response.usage.completion_tokens)
         return response.choices[0].message.content
 
     elif provider == "gemini":
@@ -447,6 +486,9 @@ Output ONLY the markdown table (with header row and separator row), nothing else
         for attempt in range(1, 4):
             try:
                 response = model.generate_content(prompt)
+                usage = getattr(response, "usage_metadata", None)
+                if usage is not None:
+                    _record_usage(usage_sink, usage.prompt_token_count, usage.candidates_token_count)
                 return response.text
             except Exception as e:
                 err = str(e)
@@ -467,19 +509,40 @@ Output ONLY the markdown table (with header row and separator row), nothing else
     return ""
 
 
+_CONFIDENCE_LINE = re.compile(r"\n?CONFIDENCE_SCORE:\s*([0-9]*\.?[0-9]+)\s*$")
+
+
+def parse_confidence_score(raw_output: str) -> tuple[str, float | None]:
+    """Split a request_confidence=True generate_test_cases() output into (clean_doc, score).
+
+    Returns (raw_output, None) unchanged if there's no trailing CONFIDENCE_SCORE line - e.g.
+    when request_confidence was False, so callers can use this unconditionally.
+    """
+    match = _CONFIDENCE_LINE.search(raw_output.strip())
+    if not match:
+        return raw_output, None
+    score = float(match.group(1))
+    clean = raw_output[: match.start()].rstrip()
+    return clean, score
+
+
 # ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
 
 def parse_markdown_table(md_text: str) -> list:
-    """Parse markdown table rows into list of dicts."""
+    """Parse markdown table rows into list of dicts.
+
+    Tolerates rows without the leading/trailing "|" some models (observed with Gemini) omit
+    despite being asked for a standard markdown table.
+    """
     rows = []
     headers = []
     for line in md_text.strip().split("\n"):
         line = line.strip()
-        if not line.startswith("|"):
+        if "|" not in line:
             continue
-        cols = [c.strip() for c in line.split("|")[1:-1]]
+        cols = [c.strip() for c in line.strip("|").split("|")]
         if not cols:
             continue
         # Skip separator row
@@ -488,7 +551,10 @@ def parse_markdown_table(md_text: str) -> list:
         if not headers:
             headers = cols
             continue
-        if len(cols) >= len(headers):
+        # Trailing columns are frequently left empty by models (e.g. "Actual Outcome/Response"),
+        # which can drop the closing "|" entirely rather than emitting an empty cell - accept
+        # short rows and let missing trailing columns default to "" downstream.
+        if len(cols) >= 2:
             rows.append(dict(zip(headers, cols)))
     return headers, rows
 
@@ -578,14 +644,24 @@ def export_xlsx(headers: list, rows: list, output_path: str):
     print(f"  ✅ Excel: {output_path} ({len(rows)} test cases)")
 
 
-def export_markdown(headers: list, rows: list, output_path: str, video_name: str, flow_analysis: str):
+def export_markdown(
+    headers: list,
+    rows: list,
+    output_path: str,
+    video_name: str,
+    flow_analysis: str,
+    confidence_score: float | None = None,
+):
     """Export to markdown with full structure."""
     with open(output_path, "w") as f:
         f.write(f"# Test Cases — Generated from Video\n\n")
         f.write(f"## Project Information\n")
         f.write(f"- **Date Created:** {time.strftime('%b %d, %Y')}\n")
         f.write(f"- **Source Video:** {video_name}\n")
-        f.write(f"- **Generated By:** Clipcase\n\n")
+        f.write(f"- **Generated By:** Clipcase\n")
+        if confidence_score is not None:
+            f.write(f"- **Confidence (self-assessed by the model):** {confidence_score:.0%}\n")
+        f.write("\n")
         f.write(f"---\n\n")
         f.write(f"## Flow Analysis\n\n{flow_analysis}\n\n")
         f.write(f"---\n\n")
@@ -765,7 +841,12 @@ Examples:
 
     # Step 5: Generate test cases
     print(f"\n[5/5] Generating test cases...")
-    test_case_md = generate_test_cases(flow_analysis, principles, args.provider, api_key)
+    raw_output = generate_test_cases(
+        flow_analysis, principles, args.provider, api_key, request_confidence=True
+    )
+    test_case_md, confidence_score = parse_confidence_score(raw_output)
+    if confidence_score is not None:
+        print(f"  Confidence (self-assessed): {confidence_score:.0%}")
 
     # Parse the generated table
     headers, rows = parse_markdown_table(test_case_md)
@@ -797,7 +878,7 @@ Examples:
     xlsx_path = os.path.join(output_dir, f"{base_name}.xlsx")
 
     print(f"\n  Exporting...")
-    export_markdown(headers, rows, md_path, video_name, flow_analysis)
+    export_markdown(headers, rows, md_path, video_name, flow_analysis, confidence_score)
     export_csv(headers, rows, csv_path)
     export_xlsx(headers, rows, xlsx_path)
 
@@ -809,6 +890,8 @@ Examples:
     print(f"\n{'=' * 60}")
     print(f"  DONE — {len(rows)} test cases generated")
     print(f"  Smoke: {smoke} | Regression: {regression} | E2E: {e2e}")
+    if confidence_score is not None:
+        print(f"  Confidence: {confidence_score:.0%}")
     print(f"{'=' * 60}")
 
 

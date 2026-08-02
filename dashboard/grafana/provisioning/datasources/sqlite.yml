@@ -1,0 +1,11 @@
+apiVersion: 1
+
+datasources:
+  - name: ClipCase Eval DB
+    uid: clipcase-eval-db
+    type: frser-sqlite-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      path: /var/lib/clipcase-db/eval.db
+    editable: true

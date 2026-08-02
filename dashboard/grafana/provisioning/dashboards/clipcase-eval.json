@@ -1,0 +1,84 @@
+{
+  "title": "ClipCase Eval",
+  "uid": "clipcase-eval",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "mode",
+        "type": "query",
+        "datasource": { "type": "frser-sqlite-datasource", "uid": "clipcase-eval-db" },
+        "query": "SELECT DISTINCT mode FROM generations",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": { "text": "video", "value": "video" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cost & latency by model (offline benchmark)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "clipcase-eval-db" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "table",
+          "rawQueryText": "SELECT model, COUNT(*) as runs, AVG(cost_usd) as avg_cost_usd, AVG(latency_ms) as avg_latency_ms FROM generations WHERE mode = '$mode' GROUP BY model",
+          "queryText": "SELECT model, COUNT(*) as runs, AVG(cost_usd) as avg_cost_usd, AVG(latency_ms) as avg_latency_ms FROM generations WHERE mode = '$mode' GROUP BY model"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Benchmark quality by model (structural_accuracy)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "clipcase-eval-db" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "table",
+          "rawQueryText": "SELECT g.model, AVG(e.structural_accuracy) as avg_structural_accuracy, COUNT(*) as scored_runs FROM generations g JOIN eval_results e ON e.generation_id = g.id WHERE g.mode = '$mode' AND e.structural_accuracy IS NOT NULL GROUP BY g.model",
+          "queryText": "SELECT g.model, AVG(e.structural_accuracy) as avg_structural_accuracy, COUNT(*) as scored_runs FROM generations g JOIN eval_results e ON e.generation_id = g.id WHERE g.mode = '$mode' AND e.structural_accuracy IS NOT NULL GROUP BY g.model"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Latency trend over time, offline benchmark (all models)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "clipcase-eval-db" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "table",
+          "rawQueryText": "SELECT created_at as time, model, latency_ms, cost_usd FROM generations WHERE mode = '$mode' ORDER BY created_at DESC LIMIT 100",
+          "queryText": "SELECT created_at as time, model, latency_ms, cost_usd FROM generations WHERE mode = '$mode' ORDER BY created_at DESC LIMIT 100"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Production confidence trend (single default model)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "clipcase-eval-db" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "table",
+          "rawQueryText": "SELECT created_at as time, model, confidence_score, latency_ms, cost_usd FROM production_requests WHERE mode = '$mode' ORDER BY created_at DESC LIMIT 100",
+          "queryText": "SELECT created_at as time, model, confidence_score, latency_ms, cost_usd FROM production_requests WHERE mode = '$mode' ORDER BY created_at DESC LIMIT 100"
+        }
+      ]
+    }
+  ]
+}

@@ -14,7 +14,7 @@ Video (.mov/.mp4) ──▶ ffmpeg (frame extraction) ──▶ AI Vision (frame
 
 1. **Frame extraction** — Uses `ffmpeg` to extract screenshots from the video at a configurable frame rate.
 2. **AI analysis** — Sends sampled frames to a vision-capable LLM (Claude or GPT-4o) to understand the complete user flow.
-3. **Test case generation** — The AI generates structured test cases following QA best practices, covering positive, negative, and edge case scenarios.
+3. **Test case generation** — The AI generates structured test cases following QA best practices, covering positive, negative, and edge case scenarios, along with a self-assessed confidence score.
 4. **Export** — Outputs test cases in Markdown, CSV, and styled Excel formats.
 
 ---
@@ -64,6 +64,8 @@ That's it. Your test cases will appear as:
 - `your_recording_test_cases.md`
 - `your_recording_test_cases.csv`
 - `your_recording_test_cases.xlsx`
+
+The markdown export and terminal output also include a confidence score — the model's own self-assessment of how completely it captured the recorded flow.
 
 ---
 
