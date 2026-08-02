@@ -39,3 +39,8 @@ clipcase = "clipcase:main"
 [project.urls]
 Homepage = "https://github.com/Amuthan07/ClipCase"
 Repository = "https://github.com/Amuthan07/ClipCase"
+
+[tool.setuptools]
+# Only the published CLI ships to PyPI. eval/, production/, dashboard/, db/ are internal
+# benchmarking and dashboard tooling for this repo, not part of the pip-installed package.
+py-modules = ["clipcase"]
