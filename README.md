@@ -57,8 +57,10 @@ export OPENAI_API_KEY=sk-...
 ### 3. Run
 
 ```bash
-python clipcase.py your_recording.mov
+python -m clipcase your_recording.mov
 ```
+
+Prefer a real install instead of running from source? `pip install clipcase` (or `pip install -e .` from a clone) registers a `clipcase` command, so every example below also works as `clipcase your_recording.mov` — no `python -m` needed.
 
 That's it. Your test cases will appear as:
 - `your_recording_test_cases.md`
@@ -72,7 +74,7 @@ The markdown export and terminal output also include a confidence score — the 
 ## Usage
 
 ```
-python clipcase.py <video_file> [options]
+python -m clipcase <video_file> [options]
 ```
 
 ### Options
@@ -91,25 +93,25 @@ python clipcase.py <video_file> [options]
 
 ```bash
 # Basic — uses Claude, 2 fps
-python clipcase.py recording.mov
+python -m clipcase recording.mov
 
 # Use OpenAI GPT-4o instead
-python clipcase.py recording.mov --provider openai
+python -m clipcase recording.mov --provider openai
 
 # Use Google Gemini (free tier)
-python clipcase.py recording.mov --provider gemini
+python -m clipcase recording.mov --provider gemini
 
 # Higher frame rate for fast-paced UI
-python clipcase.py recording.mov --fps 4
+python -m clipcase recording.mov --fps 4
 
 # Just extract frames (no AI cost), review manually
-python clipcase.py recording.mov --frames-only
+python -m clipcase recording.mov --frames-only
 
 # Custom output name
-python clipcase.py recording.mov --output login_flow_tests
+python -m clipcase recording.mov --output login_flow_tests
 
 # Analyze more frames (lower interval = more frames sent to AI)
-python clipcase.py recording.mov --sample-interval 5
+python -m clipcase recording.mov --sample-interval 5
 ```
 
 ---
@@ -153,7 +155,7 @@ python clipcase.py recording.mov --sample-interval 5
 You can customize how test cases are written by providing your own principles file:
 
 ```bash
-python clipcase.py recording.mov --principles my_standards.md
+python -m clipcase recording.mov --principles my_standards.md
 ```
 
 If you place a file named `test_case_creation_principles.md` in the same directory as the video, it will be picked up automatically.
@@ -188,7 +190,7 @@ Professionally styled with:
 
 ```
 clipcase/
-├── clipcase.py                         # Main CLI tool
+├── clipcase/                           # Main CLI package (core.py, cli.py)
 ├── requirements.txt                    # Python dependencies
 ├── .env.example                        # API key template
 ├── .gitignore                          # Git ignore rules

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clipcase"
-version = "1.1.0"
+version = "1.1.1"
 description = "Convert screen recording videos into structured QA test cases using AI vision"
 readme = "README.md"
 license = { text = "MIT" }
@@ -34,7 +34,7 @@ dev = ["pytest", "pytest-asyncio"]
 asyncio_mode = "auto"
 
 [project.scripts]
-clipcase = "clipcase:main"
+clipcase = "clipcase.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Amuthan07/ClipCase"
@@ -43,4 +43,4 @@ Repository = "https://github.com/Amuthan07/ClipCase"
 [tool.setuptools]
 # Only the published CLI ships to PyPI. eval/, production/, dashboard/, db/ are internal
 # benchmarking and dashboard tooling for this repo, not part of the pip-installed package.
-py-modules = ["clipcase"]
+packages = ["clipcase"]

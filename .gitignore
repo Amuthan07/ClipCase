@@ -1,5 +1,6 @@
 # Environment
 .env
+.pypirc
 __pycache__/
 *.pyc
 
